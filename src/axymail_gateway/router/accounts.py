@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from cryptography.fernet import Fernet
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from axymail_gateway.database import (
     delete_account,
@@ -17,6 +17,7 @@ from axymail_gateway.models import (
     RegisterAccountRequest,
     RegisterAccountResponse,
 )
+from axymail_gateway.deps import require_admin_or_owner
 from axymail_gateway.services.token_service import (
     decrypt,
     encrypt,
@@ -109,8 +110,16 @@ async def get_account_info(account_id: str, request: Request) -> AccountInfo:
     "/{account_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an account",
+    description=(
+        "Deletes a registered account and all its stored credentials. "
+        "The caller must either be the **account owner** (their bearer token resolves "
+        "to this account) or an **admin** (bearer token matches `ADMIN_API_KEY`)."
+    ),
 )
-async def remove_account(account_id: str, request: Request) -> None:
+async def remove_account(
+    request: Request,
+    account_id: str = Depends(require_admin_or_owner),
+) -> None:
     db_path: str = request.app.state.db_path
     async with get_db(db_path) as conn:
         deleted = await delete_account(conn, account_id)

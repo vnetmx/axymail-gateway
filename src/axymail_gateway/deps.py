@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cryptography.fernet import Fernet
-from fastapi import HTTPException, Request, Security, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from axymail_gateway.database import get_account_by_token_hash, get_db
+from axymail_gateway.database import get_account_by_id, get_account_by_token_hash, get_db
 from axymail_gateway.services.imap_service import ImapCredentials
 from axymail_gateway.services.smtp_service import SmtpCredentials
 from axymail_gateway.services.token_service import decrypt, hash_token
@@ -76,3 +76,57 @@ async def get_account(
         imap=imap_creds,
         smtp=smtp_creds,
     )
+
+
+async def require_admin_or_owner(
+    account_id: str,  # injected from the path parameter by FastAPI
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+) -> str:
+    """
+    Authorization guard for account-scoped privileged operations (e.g. delete).
+
+    Allows the request when the caller is:
+    - **The account owner** — their bearer token resolves to `account_id`.
+    - **An admin** — their token matches the ``ADMIN_API_KEY`` set at startup.
+
+    Returns `account_id` on success so it can be forwarded to the route handler.
+    Raises HTTP 403 Forbidden in all other cases.
+
+    If ``ADMIN_API_KEY`` is not configured, admin access is disabled entirely.
+    """
+    token = credentials.credentials
+    db_path: str = request.app.state.db_path
+    admin_api_key: str = request.app.state.admin_api_key
+
+    # ── Admin path ───────────────────────────────────────────────────────────
+    if admin_api_key and token == admin_api_key:
+        # Verify the target account actually exists before proceeding.
+        async with get_db(db_path) as conn:
+            row = await get_account_by_id(conn, account_id)
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Account not found.",
+            )
+        return account_id
+
+    # ── Owner path ───────────────────────────────────────────────────────────
+    token_hash = hash_token(token)
+    async with get_db(db_path) as conn:
+        row = await get_account_by_token_hash(conn, token_hash)
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if row["id"] != account_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this account.",
+        )
+
+    return account_id

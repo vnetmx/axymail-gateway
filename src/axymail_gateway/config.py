@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Auto-generated at startup if not provided via env.
     encryption_key: str = ""
 
+    # Admin API key — grants access to privileged operations (e.g. delete any account).
+    # If left empty, admin access is disabled; only self-service operations are allowed.
+    admin_api_key: str = ""
+
     api_host: str = "0.0.0.0"
     api_port: int = 3000
     debug: bool = False

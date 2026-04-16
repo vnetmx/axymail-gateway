@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
     # Store shared objects in app state
     app.state.db_path = settings.db_path
     app.state.fernet = Fernet(key.encode())
+    app.state.admin_api_key = settings.admin_api_key  # empty string = admin disabled
 
     logger.info("axymail-gateway started. DB: %s", settings.db_path)
     yield
