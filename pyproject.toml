@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "axymail-gateway"
+version = "0.1.0"
+description = "Self-hosted IMAP/SMTP REST API gateway"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]",
+    "aioimaplib>=1.1",
+    "aiosmtplib>=3.0",
+    "aiosqlite>=0.20",
+    "pydantic>=2.0",
+    "pydantic-settings",
+    "cryptography",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "mailpit",
+]
+
+[project.scripts]
+axymail-gateway = "axymail_gateway.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/axymail_gateway"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["src/tests"]

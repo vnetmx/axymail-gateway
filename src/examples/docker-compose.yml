@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP
+      - "1143:1143"   # IMAP
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+  axymail-gateway:
+    build: ../..
+    ports:
+      - "3000:3000"
+    environment:
+      ENCRYPTION_KEY: "dev-key-replace-in-production"
+      DB_PATH: "/data/axymail_gateway.db"
+    volumes:
+      - gateway_data:/data
+    depends_on:
+      - mailpit
+
+volumes:
+  gateway_data:
