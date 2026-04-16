@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from contextlib import asynccontextmanager
 
 from cryptography.fernet import Fernet
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from axymail_gateway.config import settings
 from axymail_gateway.database import init_db
 from axymail_gateway.router import accounts, mailboxes, messages, send
+from axymail_gateway.router import admin, health
+from axymail_gateway.telemetry import setup_metrics, setup_tracing
 
 logger = logging.getLogger("axymail_gateway")
 
@@ -17,7 +21,6 @@ logger = logging.getLogger("axymail_gateway")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialise shared state on startup, clean up on shutdown."""
-    # Resolve encryption key (generate ephemeral one if not configured)
     key = settings.get_encryption_key()
     if not settings.encryption_key:
         logger.warning(
@@ -25,13 +28,11 @@ async def lifespan(app: FastAPI):
             "All stored credentials will be unreadable after restart."
         )
 
-    # Initialise SQLite schema
     await init_db(settings.db_path)
 
-    # Store shared objects in app state
     app.state.db_path = settings.db_path
     app.state.fernet = Fernet(key.encode())
-    app.state.admin_api_key = settings.admin_api_key  # empty string = admin disabled
+    app.state.admin_api_key = settings.admin_api_key
 
     logger.info("axymail-gateway started. DB: %s", settings.db_path)
     yield
@@ -39,6 +40,13 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    # Session signing key — ephemeral if not configured (sessions lost on restart)
+    session_secret = settings.secret_key or secrets.token_hex(32)
+    if not settings.secret_key:
+        logger.warning(
+            "SECRET_KEY not set — admin sessions are ephemeral and won't survive restarts."
+        )
+
     app = FastAPI(
         title="axymail-gateway",
         description="Self-hosted IMAP/SMTP REST API gateway.",
@@ -46,17 +54,38 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ------------------------------------------------------------------
-    # Routers
-    # ------------------------------------------------------------------
+    # ── Middleware ────────────────────────────────────────────────────────────
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=session_secret,
+        session_cookie="amgw_session",
+        same_site="strict",
+        https_only=False,  # set True behind TLS in production
+    )
+
+    # ── API routers ───────────────────────────────────────────────────────────
     app.include_router(accounts.router, prefix="/v1")
     app.include_router(mailboxes.router, prefix="/v1")
     app.include_router(messages.router, prefix="/v1")
     app.include_router(send.router, prefix="/v1")
 
-    # ------------------------------------------------------------------
-    # Exception handlers
-    # ------------------------------------------------------------------
+    # ── Admin dashboard ───────────────────────────────────────────────────────
+    app.include_router(admin.router)
+
+    # ── Observability ─────────────────────────────────────────────────────────
+    app.include_router(health.router)
+
+    if settings.otel_enabled:
+        setup_tracing(
+            app,
+            service_name=settings.otel_service_name,
+            otlp_endpoint=settings.otel_exporter_otlp_endpoint,
+        )
+
+    if settings.prometheus_enabled:
+        setup_metrics(app)
+
+    # ── Exception handlers ────────────────────────────────────────────────────
 
     @app.exception_handler(404)
     async def not_found_handler(request: Request, exc) -> JSONResponse:

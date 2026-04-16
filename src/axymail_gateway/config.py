@@ -29,6 +29,21 @@ class Settings(BaseSettings):
     # If left empty, admin access is disabled; only self-service operations are allowed.
     admin_api_key: str = ""
 
+    # Secret key for signing session cookies used by the admin dashboard.
+    # Auto-generated (ephemeral) if not set — sessions won't survive restarts.
+    secret_key: str = ""
+
+    # ── Observability ────────────────────────────────────────────────────────
+    # OpenTelemetry tracing
+    otel_enabled: bool = False
+    otel_service_name: str = "axymail-gateway"
+    # OTLP HTTP endpoint, e.g. http://otel-collector:4318
+    # When empty, a no-op exporter is used (spans are generated but not exported).
+    otel_exporter_otlp_endpoint: str = ""
+
+    # Prometheus metrics — exposes /metrics in OpenMetrics format
+    prometheus_enabled: bool = True
+
     api_host: str = "0.0.0.0"
     api_port: int = 3000
     debug: bool = False
