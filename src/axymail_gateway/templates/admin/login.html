@@ -1,0 +1,46 @@
+{% extends "admin/base.html" %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="login-wrap">
+  <div class="login-card">
+
+    <div class="login-header">
+      <span class="login-icon">✉</span>
+      <div class="login-title">axymail-gateway</div>
+      <div class="login-sub">Admin Dashboard</div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    {% if not admin_configured %}
+    <div class="alert alert-error">
+      Admin access is not configured.<br>
+      Set the <code>ADMIN_API_KEY</code> environment variable and restart the service.
+    </div>
+    {% else %}
+    <form method="post" action="/admin/login" autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="api_key">Admin Key</label>
+        <input
+          class="form-input"
+          type="password"
+          id="api_key"
+          name="api_key"
+          placeholder="••••••••••••••••"
+          autocomplete="current-password"
+          autofocus
+          required
+        />
+        <p class="form-hint">Enter the <code>ADMIN_API_KEY</code> configured on the server.</p>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

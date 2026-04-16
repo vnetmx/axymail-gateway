@@ -1,0 +1,61 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Confirm Delete{% endblock %}
+
+{% block content %}
+<div class="confirm-wrap">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Delete Account</span>
+    </div>
+
+    <div class="card-body">
+      <p>You are about to permanently delete the following account and all its stored credentials:</p>
+
+      <table class="account-detail-table" style="margin: 20px 0;">
+        <tbody>
+          <tr>
+            <td>Email</td>
+            <td><strong>{{ account.email }}</strong></td>
+          </tr>
+          <tr>
+            <td>Account ID</td>
+            <td><span class="mono">{{ account.id }}</span></td>
+          </tr>
+          <tr>
+            <td>IMAP</td>
+            <td class="mono text-muted">{{ account.imap_host }}:{{ account.imap_port }}</td>
+          </tr>
+          <tr>
+            <td>SMTP</td>
+            <td class="mono text-muted">{{ account.smtp_host }}:{{ account.smtp_port }}</td>
+          </tr>
+          <tr>
+            <td>Registered</td>
+            <td class="text-muted">{{ account.created_at[:19].replace("T", " ") }} UTC</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="danger-zone">
+        <div class="danger-zone-title">⚠ This action cannot be undone</div>
+        <p class="text-muted" style="font-size: 13px; margin-bottom: 16px;">
+          The account's IMAP and SMTP credentials, along with its authentication token,
+          will be permanently erased from the database.
+        </p>
+        <div class="flex-gap">
+          <form method="post" action="/admin/accounts/{{ account.id }}/delete">
+            <button type="submit" class="btn btn-danger">
+              Yes, delete this account
+            </button>
+          </form>
+          <a href="/admin/" class="btn btn-secondary">Cancel</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

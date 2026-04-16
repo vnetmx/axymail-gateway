@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Admin{% endblock %} — axymail-gateway</title>
+  <style>
+    :root {
+      --bg:          #f6f8fa;
+      --surface:     #ffffff;
+      --nav-bg:      #24292f;
+      --accent:      #0969da;
+      --danger:      #cf222e;
+      --danger-bg:   #fff0ee;
+      --success-bg:  #dafbe1;
+      --success-fg:  #116329;
+      --text:        #1f2328;
+      --muted:       #636c76;
+      --border:      #d0d7de;
+      --radius:      6px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    /* ── Top nav ── */
+    .topnav {
+      background: var(--nav-bg);
+      height: 52px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+    }
+    .nav-logo { font-size: 22px; line-height: 1; }
+    .nav-badge {
+      background: rgba(56, 139, 253, 0.15);
+      color: #58a6ff;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      border: 1px solid rgba(56, 139, 253, 0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Container ── */
+    .container {
+      max-width: 1000px;
+      margin: 32px auto;
+      padding: 0 24px;
+    }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 5px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .card-body {
+      padding: 20px;
+    }
+
+    /* ── Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 9px 16px;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    td {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f6f8fa; }
+
+    .mono {
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    .btn-sm { padding: 3px 10px; font-size: 12px; }
+    .btn-block { width: 100%; justify-content: center; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { background: #0860ca; border-color: #0860ca; }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
+    .btn-danger:hover { background: #a40e26; border-color: #a40e26; }
+
+    .btn-ghost {
+      background: transparent;
+      color: #c9d1d9;
+      border-color: #444c56;
+    }
+    .btn-ghost:hover { background: #30363d; border-color: #8b949e; }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg); }
+
+    /* ── Alerts / Flash ── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      font-size: 13px;
+      border: 1px solid transparent;
+    }
+    .alert-success {
+      background: var(--success-bg);
+      color: var(--success-fg);
+      border-color: rgba(45, 164, 78, 0.33);
+    }
+    .alert-error {
+      background: var(--danger-bg);
+      color: var(--danger);
+      border-color: rgba(207, 34, 46, 0.33);
+    }
+
+    /* ── Form ── */
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color 0.1s, box-shadow 0.1s;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+    }
+    .form-hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 5px;
+    }
+
+    /* ── Danger zone ── */
+    .danger-zone {
+      border: 1px solid rgba(207, 34, 46, 0.35);
+      background: #fff5f5;
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .danger-zone-title {
+      color: var(--danger);
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--muted);
+    }
+    .empty-state-icon { font-size: 32px; margin-bottom: 10px; }
+    .empty-state-text { font-size: 14px; }
+
+    /* ── Login page ── */
+    .login-wrap {
+      min-height: 100vh;
+      background: var(--nav-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 36px;
+      width: 380px;
+    }
+    .login-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .login-icon { font-size: 42px; display: block; margin-bottom: 10px; }
+    .login-title { font-size: 18px; font-weight: 700; }
+    .login-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+
+    /* ── Confirm page ── */
+    .confirm-wrap {
+      max-width: 560px;
+    }
+    .account-detail-table td:first-child {
+      font-weight: 600;
+      color: var(--muted);
+      width: 130px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .account-detail-table tr:last-child td { border-bottom: none; }
+
+    /* ── Utilities ── */
+    .text-muted { color: var(--muted); }
+    .text-danger { color: var(--danger); }
+    .mt-1 { margin-top: 4px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 16px; }
+    .flex { display: flex; }
+    .flex-gap { display: flex; gap: 8px; align-items: center; }
+    code {
+      background: #eef0f3;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+{% block nav %}
+<nav class="topnav">
+  <a class="nav-brand" href="/admin/">
+    <span class="nav-logo">✉</span>
+    <span>axymail-gateway</span>
+    <span class="nav-badge">admin</span>
+  </a>
+  <div>
+    <a href="/admin/logout" class="btn btn-ghost btn-sm">Logout</a>
+  </div>
+</nav>
+{% endblock %}
+
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

@@ -1,0 +1,58 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }}">{{ flash.msg }}</div>
+{% endif %}
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-value">{{ accounts | length }}</div>
+    <div class="stat-label">Registered accounts</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Accounts</span>
+  </div>
+
+  {% if accounts %}
+  <table>
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>Account ID</th>
+        <th>IMAP</th>
+        <th>SMTP</th>
+        <th>Registered</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for acc in accounts %}
+      <tr>
+        <td><strong>{{ acc.email }}</strong></td>
+        <td><span class="mono">{{ acc.id }}</span></td>
+        <td class="text-muted mono">{{ acc.imap_host }}:{{ acc.imap_port }}</td>
+        <td class="text-muted mono">{{ acc.smtp_host }}:{{ acc.smtp_port }}</td>
+        <td class="text-muted">{{ acc.created_at[:19].replace("T", " ") }} UTC</td>
+        <td>
+          <a href="/admin/accounts/{{ acc.id }}/delete" class="btn btn-danger btn-sm">Delete</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">📭</div>
+    <div class="empty-state-text">No accounts registered yet.</div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
