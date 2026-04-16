@@ -256,6 +256,71 @@ def sanitize_message(msg: dict) -> tuple[dict, list[str]]:
     return msg, warnings
 
 
+async def sanitize_message_with_guard(
+    msg: dict,
+    guard_url: str,
+    guard_timeout: float = 5.0,
+    max_chunk_size: int = 2000,
+) -> tuple[dict, list[str]]:
+    """
+    Full sanitization pipeline — Layer 1 (local) + Layer 2 (external guard).
+
+    1. Run local sanitization first (HTML clean + regex prompt injection).
+    2. Then send subject/text/html to the external guard service in chunks.
+    3. Merge warnings from both layers.
+
+    If the guard service is unreachable, the result still includes Layer 1
+    protection plus a warning noting the guard was unavailable.
+    """
+    from axymail_gateway.services.guard_client import build_chunks, scan
+
+    # Layer 1 — local
+    msg, warnings = sanitize_message(msg)
+
+    # Layer 2 — external guard
+    chunks = build_chunks(
+        subject=msg.get("subject"),
+        text=msg.get("text"),
+        html=msg.get("html"),
+        max_chunk_size=max_chunk_size,
+    )
+
+    if chunks:
+        result = await scan(guard_url, chunks, timeout=guard_timeout)
+        warnings.extend(result.warnings())
+
+    return msg, warnings
+
+
+async def sanitize_message_summary_with_guard(
+    msg: dict,
+    guard_url: str,
+    guard_timeout: float = 5.0,
+    max_chunk_size: int = 2000,
+) -> tuple[dict, list[str]]:
+    """
+    Lighter sanitization for list items — Layer 1 + Layer 2 on subject only.
+    """
+    from axymail_gateway.services.guard_client import build_chunks, scan
+
+    # Layer 1 — local
+    msg, warnings = sanitize_message_summary(msg)
+
+    # Layer 2 — guard service (subject only for list items)
+    chunks = build_chunks(
+        subject=msg.get("subject"),
+        text=None,
+        html=None,
+        max_chunk_size=max_chunk_size,
+    )
+
+    if chunks:
+        result = await scan(guard_url, chunks, timeout=guard_timeout)
+        warnings.extend(result.warnings())
+
+    return msg, warnings
+
+
 def sanitize_message_summary(msg: dict) -> tuple[dict, list[str]]:
     """
     Lighter sanitization for message list items (no body, just headers).

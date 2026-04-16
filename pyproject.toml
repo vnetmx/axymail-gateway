@@ -28,6 +28,8 @@ dependencies = [
     "prometheus-fastapi-instrumentator>=6.1",
     # Content sanitization
     "nh3>=0.2",
+    # HTTP client for external guard service
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

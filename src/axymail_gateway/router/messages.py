@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from axymail_gateway.deps import AccountRecord, get_account
 from axymail_gateway.models import FullMessage, MessageListItem, UpdateFlagsRequest
 from axymail_gateway.services import imap_service
-from axymail_gateway.services.sanitizer import sanitize_message, sanitize_message_summary
+from axymail_gateway.services.sanitizer import (
+    sanitize_message,
+    sanitize_message_summary,
+    sanitize_message_summary_with_guard,
+    sanitize_message_with_guard,
+)
 
 router = APIRouter(tags=["messages"])
 
@@ -18,12 +23,21 @@ def _assert_owner(account: AccountRecord, account_id: str) -> None:
         )
 
 
+def _guard_config(request: Request) -> dict | None:
+    """Return guard service config from app state, or None if disabled."""
+    cfg = getattr(request.app.state, "guard_config", None)
+    if cfg and cfg.get("enabled") and cfg.get("url"):
+        return cfg
+    return None
+
+
 @router.get(
     "/accounts/{account_id}/messages",
     response_model=list[MessageListItem],
     summary="List messages in a mailbox",
 )
 async def list_messages(
+    request: Request,
     account_id: str,
     account: AccountRecord = Depends(get_account),
     mailbox: str = Query("INBOX", description="IMAP folder path"),
@@ -43,11 +57,20 @@ async def list_messages(
             detail=f"IMAP error: {exc}",
         ) from exc
 
+    guard = _guard_config(request) if sanitize else None
     result = []
     for m in msgs:
         warnings: list[str] = []
         if sanitize:
-            m, warnings = sanitize_message_summary(m)
+            if guard:
+                m, warnings = await sanitize_message_summary_with_guard(
+                    m,
+                    guard_url=guard["url"],
+                    guard_timeout=guard["timeout"],
+                    max_chunk_size=guard["max_chunk_size"],
+                )
+            else:
+                m, warnings = sanitize_message_summary(m)
         result.append(
             MessageListItem(
                 uid=m["uid"],
@@ -70,6 +93,7 @@ async def list_messages(
     summary="Fetch a single message by UID",
 )
 async def get_message(
+    request: Request,
     account_id: str,
     uid: int,
     account: AccountRecord = Depends(get_account),
@@ -91,7 +115,16 @@ async def get_message(
 
     warnings: list[str] = []
     if sanitize:
-        msg, warnings = sanitize_message(msg)
+        guard = _guard_config(request)
+        if guard:
+            msg, warnings = await sanitize_message_with_guard(
+                msg,
+                guard_url=guard["url"],
+                guard_timeout=guard["timeout"],
+                max_chunk_size=guard["max_chunk_size"],
+            )
+        else:
+            msg, warnings = sanitize_message(msg)
 
     return FullMessage(
         uid=msg["uid"],

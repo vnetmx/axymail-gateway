@@ -33,6 +33,12 @@ async def lifespan(app: FastAPI):
     app.state.db_path = settings.db_path
     app.state.fernet = Fernet(key.encode())
     app.state.admin_api_key = settings.admin_api_key
+    app.state.guard_config = {
+        "enabled": settings.guard_enabled,
+        "url": settings.guard_service_url,
+        "timeout": settings.guard_timeout,
+        "max_chunk_size": settings.guard_max_chunk_size,
+    }
 
     logger.info("axymail-gateway started. DB: %s", settings.db_path)
     yield
