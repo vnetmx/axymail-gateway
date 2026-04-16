@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from axymail_gateway.deps import AccountRecord, get_account
 from axymail_gateway.models import FullMessage, MessageListItem, UpdateFlagsRequest
 from axymail_gateway.services import imap_service
+from axymail_gateway.services.sanitizer import sanitize_message, sanitize_message_summary
 
 router = APIRouter(tags=["messages"])
 
@@ -28,6 +29,7 @@ async def list_messages(
     mailbox: str = Query("INBOX", description="IMAP folder path"),
     page: int = Query(0, ge=0, description="Zero-based page index"),
     page_size: int = Query(20, ge=1, le=100, description="Messages per page"),
+    sanitize: bool = Query(True, description="Sanitize content against XSS and prompt injection"),
 ) -> list[MessageListItem]:
     _assert_owner(account, account_id)
 
@@ -41,19 +43,25 @@ async def list_messages(
             detail=f"IMAP error: {exc}",
         ) from exc
 
-    return [
-        MessageListItem(
-            uid=m["uid"],
-            subject=m.get("subject"),
-            **{"from": m.get("from")},
-            to=m.get("to", []),
-            date=m.get("date"),
-            seen=m.get("seen", False),
-            flagged=m.get("flagged", False),
-            size=m.get("size"),
+    result = []
+    for m in msgs:
+        warnings: list[str] = []
+        if sanitize:
+            m, warnings = sanitize_message_summary(m)
+        result.append(
+            MessageListItem(
+                uid=m["uid"],
+                subject=m.get("subject"),
+                **{"from": m.get("from")},
+                to=m.get("to", []),
+                date=m.get("date"),
+                seen=m.get("seen", False),
+                flagged=m.get("flagged", False),
+                size=m.get("size"),
+                sanitized_warnings=warnings,
+            )
         )
-        for m in msgs
-    ]
+    return result
 
 
 @router.get(
@@ -66,6 +74,7 @@ async def get_message(
     uid: int,
     account: AccountRecord = Depends(get_account),
     mailbox: str = Query("INBOX"),
+    sanitize: bool = Query(True, description="Sanitize content against XSS and prompt injection"),
 ) -> FullMessage:
     _assert_owner(account, account_id)
 
@@ -80,6 +89,10 @@ async def get_message(
     if msg is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found.")
 
+    warnings: list[str] = []
+    if sanitize:
+        msg, warnings = sanitize_message(msg)
+
     return FullMessage(
         uid=msg["uid"],
         subject=msg.get("subject"),
@@ -92,6 +105,7 @@ async def get_message(
         text=msg.get("text"),
         html=msg.get("html"),
         attachments=msg.get("attachments", []),
+        sanitized_warnings=warnings,
     )
 
 

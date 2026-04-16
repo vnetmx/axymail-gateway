@@ -73,6 +73,10 @@ class MessageListItem(BaseModel):
     seen: bool = False
     flagged: bool = False
     size: Optional[int] = None
+    sanitized_warnings: list[str] = Field(
+        default=[],
+        description="Non-empty when sanitization removed or neutralized suspicious content.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +103,10 @@ class FullMessage(BaseModel):
     text: Optional[str] = None
     html: Optional[str] = None
     attachments: list[Attachment] = []
+    sanitized_warnings: list[str] = Field(
+        default=[],
+        description="Non-empty when sanitization removed or neutralized suspicious content.",
+    )
 
 
 # ---------------------------------------------------------------------------
