@@ -349,11 +349,14 @@ def sanitize_message_summary(msg: dict) -> tuple[dict, list[str]]:
     warnings: list[str] = []
 
     if msg.get("subject"):
-        subject = sanitize_text(msg["subject"]) or ""
+        subject = msg["subject"]
+        # 1. Detect injections on raw text first (catches HTML-wrapped patterns like <system>)
         subject, found = _neutralize_injections(subject)
-        msg["subject"] = subject
         for c in found:
             warnings.append(f"subject: {c}")
+        # 2. Then sanitize/strip HTML
+        subject = sanitize_text(subject) or ""
+        msg["subject"] = subject
 
     # From/To are plain strings — strip any HTML and check for injection
     for field in ("from", "to"):

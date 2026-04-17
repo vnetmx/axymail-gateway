@@ -62,6 +62,10 @@ class GuardResult:
     def is_poisoned(self) -> bool:
         return any(r.is_poisoned for r in self.results)
 
+    @property
+    def poisoned_fields(self) -> list[str]:
+        return [v.field_id for v in self.results if v.is_poisoned]
+
     def warnings(self) -> list[str]:
         warns: list[str] = []
         for r in self.results:
@@ -96,20 +100,20 @@ def build_fields(
     subject: str | None,
     text: str | None,
     html: str | None,
-) -> list[tuple[str, str]]:
+) -> list[dict]:
     """
-    Build the list of (field_id, content) pairs to scan.
+    Build the list of {"id": field_id, "content": content} dicts to scan.
     HTML is converted to visible text before being included.
     """
-    fields: list[tuple[str, str]] = []
+    fields: list[dict] = []
     if subject and subject.strip():
-        fields.append(("subject", subject))
+        fields.append({"id": "subject", "content": subject})
     if text and text.strip():
-        fields.append(("text", text))
+        fields.append({"id": "text", "content": text})
     if html and html.strip():
         visible = _strip_tags(html)
         if visible.strip():
-            fields.append(("html", visible))
+            fields.append({"id": "html", "content": visible})
     return fields
 
 
@@ -169,7 +173,9 @@ async def scan_message_fields(
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            for field_id, content in fields_to_scan:
+            for item in fields_to_scan:
+                field_id = item["id"]
+                content = item["content"]
                 result = await _scan_field(client, base_url, field_id, content)
                 results.append(result)
     except httpx.TimeoutException as exc:
