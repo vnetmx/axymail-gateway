@@ -9,8 +9,10 @@ from __future__ import annotations
 import email
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from email.header import decode_header, make_header
 from email.message import Message
+from typing import Literal
 
 import aioimaplib
 
@@ -157,6 +159,96 @@ def _attachments(msg: Message) -> list[dict]:
     return result
 
 
+# ── search / sort helpers ─────────────────────────────────────────────────────
+
+_IMAP_MONTHS = {
+    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+    7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+}
+
+
+def _to_imap_date(iso_date: str) -> str:
+    """Convert ISO date string (YYYY-MM-DD) to IMAP date format (01-Jan-2024)."""
+    dt = datetime.strptime(iso_date, "%Y-%m-%d")
+    return f"{dt.day:02d}-{_IMAP_MONTHS[dt.month]}-{dt.year}"
+
+
+def _build_search_criteria(
+    q: str | None,
+    subject: str | None,
+    from_addr: str | None,
+    since: str | None,
+    before: str | None,
+    seen: bool | None,
+    flagged: bool | None,
+) -> str:
+    """
+    Build an IMAP SEARCH criteria string from filter parameters.
+
+    All provided criteria are implicitly AND'd by the IMAP protocol.
+    ``q`` performs an OR search across subject and from fields.
+    Date strings must be ISO format (YYYY-MM-DD).
+    """
+    parts: list[str] = []
+
+    # Free-text: search subject OR from
+    if q:
+        safe_q = q.replace('"', "")  # basic escaping for IMAP string literals
+        parts.append(f'OR SUBJECT "{safe_q}" FROM "{safe_q}"')
+
+    if subject:
+        safe_s = subject.replace('"', "")
+        parts.append(f'SUBJECT "{safe_s}"')
+
+    if from_addr:
+        safe_f = from_addr.replace('"', "")
+        parts.append(f'FROM "{safe_f}"')
+
+    if since:
+        parts.append(f"SINCE {_to_imap_date(since)}")
+
+    if before:
+        parts.append(f"BEFORE {_to_imap_date(before)}")
+
+    if seen is True:
+        parts.append("SEEN")
+    elif seen is False:
+        parts.append("UNSEEN")
+
+    if flagged is True:
+        parts.append("FLAGGED")
+    elif flagged is False:
+        parts.append("UNFLAGGED")
+
+    return " ".join(parts) if parts else "ALL"
+
+
+def _sort_messages(
+    messages: list[dict],
+    sort_by: str,
+    sort_order: str,
+) -> list[dict]:
+    """Sort a list of message dicts by the requested field."""
+    reverse = sort_order.lower() == "desc"
+
+    def _key(m: dict):
+        if sort_by == "subject":
+            return (m.get("subject") or "").lower()
+        if sort_by == "from":
+            return (m.get("from") or "").lower()
+        if sort_by == "size":
+            return m.get("size") or 0
+        # default: date — parse RFC 2822 date or fall back to empty string
+        raw = m.get("date") or ""
+        try:
+            from email.utils import parsedate_to_datetime
+            return parsedate_to_datetime(raw)
+        except Exception:
+            return raw
+
+    return sorted(messages, key=_key, reverse=reverse)
+
+
 # ── public API ───────────────────────────────────────────────────────────────
 
 async def list_mailboxes(creds: ImapCredentials) -> list[dict]:
@@ -191,64 +283,100 @@ async def list_messages(
     mailbox: str = "INBOX",
     page: int = 0,
     page_size: int = 20,
+    # ── Filters ──────────────────────────────────────────────────────────────
+    q: str | None = None,           # free-text: subject OR from
+    subject: str | None = None,     # subject contains
+    from_addr: str | None = None,   # sender contains
+    since: str | None = None,       # messages on or after YYYY-MM-DD
+    before: str | None = None,      # messages before YYYY-MM-DD
+    seen: bool | None = None,       # True=read, False=unread
+    flagged: bool | None = None,    # True=flagged, False=unflagged
+    # ── Sort ─────────────────────────────────────────────────────────────────
+    sort_by: str | None = None,     # date | subject | from | size
+    sort_order: str = "desc",       # asc | desc
 ) -> list[dict]:
     """
-    List messages in *mailbox*, paginated by *page* / *page_size*.
+    List messages in *mailbox* with optional server-side filtering and
+    client-side sorting.
 
-    Fetches only headers + flags (no full body) for efficiency.
+    Filtering uses IMAP SEARCH criteria — evaluated on the server before
+    any data is transferred.
 
-    Note: aioimaplib's uid() does not support SEARCH, so we use the regular
-    SEARCH command (returns sequence numbers) then FETCH with UID in the data
-    spec to get the stable message UIDs.
+    Sorting fetches all matching headers (not just the current page) and
+    sorts them in Python before paginating.  For large mailboxes use
+    filters to narrow the result set first.
     """
     client = await _connect(creds)
     try:
         await client.select(mailbox)
 
-        result, data = await client.search("ALL")
+        criteria = _build_search_criteria(q, subject, from_addr, since, before, seen, flagged)
+        result, data = await client.search(criteria)
         if result != "OK" or not data or not data[0]:
             return []
 
         all_seqs: list[str] = data[0].decode().split()
+        if not all_seqs:
+            return []
+
+        # ── With sort: fetch all matching headers, sort, then paginate ──────
+        if sort_by:
+            seq_set = ",".join(all_seqs)
+            result, fetch_data = await client.fetch(
+                seq_set,
+                "(UID FLAGS RFC822.SIZE BODY[HEADER.FIELDS (FROM TO SUBJECT DATE)])",
+            )
+            if result != "OK":
+                return []
+            all_messages = _parse_header_fetch(fetch_data)
+            sorted_messages = _sort_messages(all_messages, sort_by, sort_order)
+            start = page * page_size
+            return sorted_messages[start : start + page_size]
+
+        # ── Without sort: paginate first, then fetch only the page ───────────
         start = page * page_size
         page_seqs = all_seqs[start : start + page_size]
         if not page_seqs:
             return []
 
-        seq_set = ",".join(page_seqs)
         result, fetch_data = await client.fetch(
-            seq_set,
+            ",".join(page_seqs),
             "(UID FLAGS RFC822.SIZE BODY[HEADER.FIELDS (FROM TO SUBJECT DATE)])",
         )
         if result != "OK":
             return []
+        return _parse_header_fetch(fetch_data)
 
-        messages: list[dict] = []
-        for meta_line, header_bytes in _extract_fetch_pairs(fetch_data):
-            flags = _parse_flags_from_line(meta_line)
-
-            uid_m = re.search(rb"UID\s+(\d+)", meta_line, re.IGNORECASE)
-            uid = uid_m.group(1).decode() if uid_m else ""
-
-            size_m = re.search(rb"RFC822\.SIZE\s+(\d+)", meta_line, re.IGNORECASE)
-            size = int(size_m.group(1)) if size_m else 0
-
-            msg = email.message_from_bytes(header_bytes) if header_bytes else email.message_from_string("")
-            messages.append(
-                {
-                    "uid": uid,
-                    "subject": _decode_header_str(msg.get("Subject")),
-                    "from": msg.get("From", ""),
-                    "to": [a.strip() for a in (msg.get("To") or "").split(",") if a.strip()],
-                    "date": msg.get("Date"),
-                    "seen": _FLAG_SEEN in flags,
-                    "flagged": _FLAG_FLAGGED in flags,
-                    "size": size,
-                }
-            )
-        return messages
     finally:
         await _safe_logout(client)
+
+
+def _parse_header_fetch(fetch_data: list) -> list[dict]:
+    """Parse an aioimaplib FETCH response into a list of message summary dicts."""
+    messages: list[dict] = []
+    for meta_line, header_bytes in _extract_fetch_pairs(fetch_data):
+        flags = _parse_flags_from_line(meta_line)
+
+        uid_m = re.search(rb"UID\s+(\d+)", meta_line, re.IGNORECASE)
+        uid = uid_m.group(1).decode() if uid_m else ""
+
+        size_m = re.search(rb"RFC822\.SIZE\s+(\d+)", meta_line, re.IGNORECASE)
+        size = int(size_m.group(1)) if size_m else 0
+
+        msg = email.message_from_bytes(header_bytes) if header_bytes else email.message_from_string("")
+        messages.append(
+            {
+                "uid": uid,
+                "subject": _decode_header_str(msg.get("Subject")),
+                "from": msg.get("From", ""),
+                "to": [a.strip() for a in (msg.get("To") or "").split(",") if a.strip()],
+                "date": msg.get("Date"),
+                "seen": _FLAG_SEEN in flags,
+                "flagged": _FLAG_FLAGGED in flags,
+                "size": size,
+            }
+        )
+    return messages
 
 
 async def get_message(

@@ -40,21 +40,54 @@ def _guard_config(request: Request) -> dict | None:
     "/accounts/{account_id}/messages",
     response_model=list[MessageListItem],
     summary="List messages in a mailbox",
+    description=(
+        "List messages with optional **server-side filtering** (IMAP SEARCH) "
+        "and **client-side sorting**.\n\n"
+        "Filters are evaluated on the IMAP server before any data is "
+        "transferred, so they are efficient even on large mailboxes.  "
+        "Sorting fetches all matching headers then sorts in Python — "
+        "use filters to narrow the result set when sorting large folders."
+    ),
 )
 async def list_messages(
     request: Request,
     account_id: str,
     account: AccountRecord = Depends(get_account),
+    # Pagination
     mailbox: str = Query("INBOX", description="IMAP folder path"),
     page: int = Query(0, ge=0, description="Zero-based page index"),
     page_size: int = Query(20, ge=1, le=100, description="Messages per page"),
+    # Filters
+    q: str | None = Query(None, description="Free-text search in subject OR sender"),
+    subject: str | None = Query(None, description="Subject contains"),
+    from_addr: str | None = Query(None, alias="from", description="Sender contains"),
+    since: str | None = Query(None, description="Messages on or after date (YYYY-MM-DD)"),
+    before: str | None = Query(None, description="Messages before date (YYYY-MM-DD)"),
+    seen: bool | None = Query(None, description="true = read only, false = unread only"),
+    flagged: bool | None = Query(None, description="true = flagged only, false = unflagged only"),
+    # Sort
+    sort_by: str | None = Query(None, description="Sort field: date | subject | from | size"),
+    sort_order: str = Query("desc", description="Sort direction: asc | desc"),
+    # Sanitization
     sanitize: bool = Query(True, description="Sanitize content against XSS and prompt injection"),
 ) -> list[MessageListItem]:
     _assert_owner(account, account_id)
 
     try:
         msgs = await imap_service.list_messages(
-            account.imap, mailbox=mailbox, page=page, page_size=page_size
+            account.imap,
+            mailbox=mailbox,
+            page=page,
+            page_size=page_size,
+            q=q,
+            subject=subject,
+            from_addr=from_addr,
+            since=since,
+            before=before,
+            seen=seen,
+            flagged=flagged,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
     except Exception as exc:
         raise HTTPException(
