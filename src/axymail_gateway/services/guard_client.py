@@ -105,9 +105,10 @@ async def _scan_field(
     Scan a single field by posting to /analyze/prompt.
     Returns a FieldResult with the sanitized content and scanner scores.
     """
-    payload: dict = {"prompt": content}
-    if scanners_suppress:
-        payload["scanners_suppress"] = scanners_suppress
+    payload: dict = {
+        "prompt": content,
+        "scanners_suppress": scanners_suppress or ["Secrets"],  # PromptInjection only by default
+    }
 
     url = f"{base_url.rstrip('/')}{_ANALYZE_PATH}"
     resp = await client.post(url, json=payload)
