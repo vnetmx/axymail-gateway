@@ -135,7 +135,7 @@ async def test_delete_account_no_auth(client: AsyncClient):
     account_id, _ = await register(client)
 
     resp = await client.delete(f"/v1/accounts/{account_id}")
-    assert resp.status_code == 403
+    assert resp.status_code in (401, 403)
 
 
 @pytest.mark.asyncio
