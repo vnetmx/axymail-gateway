@@ -7,12 +7,8 @@ Docs:    /home/piuser/projects/llm-guard-api/docs/integration-guide.md
 Endpoint: POST /analyze/prompt
 
 Each email field (subject, text, html) is scanned independently.
-The API runs two scanners per call unless suppressed:
-  - PromptInjection: detects injection attacks and jailbreaks (ML-based, DeBERTa)
-  - Secrets:         detects and redacts credentials, API keys, tokens (100+ providers)
-
-The `sanitized_prompt` in the response is used as the replacement content —
-this means secrets are automatically redacted in the output (e.g. AKIAIO… → AK..LE).
+This client always suppresses the Secrets scanner — only PromptInjection runs.
+Secrets detection is out of scope for axymail-gateway.
 """
 from __future__ import annotations
 
@@ -124,15 +120,14 @@ async def _scan_field(
     base_url: str,
     field_id: str,
     content: str,
-    scanners_suppress: list[str] | None = None,
 ) -> FieldResult:
     """
     Scan a single field by posting to /analyze/prompt.
-    Returns a FieldResult with the sanitized content and scanner scores.
+    Only PromptInjection runs — Secrets is always suppressed.
     """
     payload: dict = {
         "prompt": content,
-        "scanners_suppress": scanners_suppress or ["Secrets"],  # PromptInjection only by default
+        "scanners_suppress": ["Secrets"],
     }
 
     url = f"{base_url.rstrip('/')}{_ANALYZE_PATH}"
