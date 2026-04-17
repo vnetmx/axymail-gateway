@@ -7,15 +7,12 @@ and closes the connection (v1: no persistent pool).
 from __future__ import annotations
 
 import email
-import logging
 import re
 from dataclasses import dataclass
 from email.header import decode_header, make_header
 from email.message import Message
 
 import aioimaplib
-
-logger = logging.getLogger("axymail_gateway.imap")
 
 # ── IMAP flag constants ──────────────────────────────────────────────────────
 _FLAG_SEEN = "\\Seen"
@@ -89,25 +86,29 @@ def _extract_fetch_pairs(data: list) -> list[tuple[bytes, bytes]]:
     pairs for each fetched message.
 
     aioimaplib represents literal data (the actual message/header bytes) as a separate
-    bytes element immediately following the FETCH metadata line:
+    element immediately following the FETCH metadata line.  Critically, metadata lines
+    come back as `bytes` while literal payloads come back as `bytearray` — so we must
+    accept both types when looking for the literal.
 
-        data[i]   = b'3 FETCH (UID 42 FLAGS (\\Seen) RFC822 {1234}'   ← metadata
-        data[i+1] = b'<raw email bytes ...>'                           ← literal
-        data[i+2] = b')'                                               ← closing paren
+        data[i]   = b'3 FETCH (UID 42 FLAGS (\\Seen) RFC822 {1234}'  ← bytes
+        data[i+1] = bytearray(b'<raw email bytes ...>')              ← bytearray!
+        data[i+2] = b')'                                             ← bytes
     """
     pairs: list[tuple[bytes, bytes]] = []
     i = 0
     while i < len(data):
         item = data[i]
+        # FETCH metadata lines are always bytes
         if isinstance(item, bytes) and _FETCH_LINE_RE.match(item):
-            # Next element should be the literal bytes
             literal = b""
-            if i + 1 < len(data) and isinstance(data[i + 1], bytes):
+            if i + 1 < len(data):
                 candidate = data[i + 1]
-                # Make sure it's not a closing paren or another FETCH line
-                if not _FETCH_LINE_RE.match(candidate) and candidate.strip() != b")":
-                    literal = candidate
-                    i += 1  # consume the literal
+                # Literals come back as bytearray; accept both bytes and bytearray
+                if isinstance(candidate, (bytes, bytearray)):
+                    candidate_b = bytes(candidate)
+                    if not _FETCH_LINE_RE.match(candidate_b) and candidate_b.strip() != b")":
+                        literal = candidate_b
+                        i += 1  # consume the literal
             pairs.append((item, literal))
         i += 1
     return pairs
@@ -222,13 +223,6 @@ async def list_messages(
         if result != "OK":
             return []
 
-        logger.debug("list_messages fetch_data len=%d", len(fetch_data))
-        for idx, item in enumerate(fetch_data):
-            if isinstance(item, (bytes, bytearray)):
-                logger.debug("  [%d] bytes len=%d repr=%r", idx, len(item), bytes(item)[:120])
-            else:
-                logger.debug("  [%d] type=%s repr=%r", idx, type(item).__name__, item)
-
         messages: list[dict] = []
         for meta_line, header_bytes in _extract_fetch_pairs(fetch_data):
             flags = _parse_flags_from_line(meta_line)
@@ -269,13 +263,6 @@ async def get_message(
         result, fetch_data = await client.uid("fetch", str(uid), "(UID FLAGS RFC822)")
         if result != "OK":
             return None
-
-        logger.debug("get_message uid=%s fetch_data len=%d", uid, len(fetch_data))
-        for idx, item in enumerate(fetch_data):
-            if isinstance(item, (bytes, bytearray)):
-                logger.debug("  [%d] bytes len=%d repr=%r", idx, len(item), bytes(item)[:120])
-            else:
-                logger.debug("  [%d] type=%s repr=%r", idx, type(item).__name__, item)
 
         pairs = _extract_fetch_pairs(fetch_data)
         if not pairs:
