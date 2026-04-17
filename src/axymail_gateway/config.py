@@ -50,7 +50,6 @@ class Settings(BaseSettings):
     guard_enabled: bool = False
     guard_service_url: str = ""
     guard_timeout: float = 5.0        # seconds per request
-    guard_max_chunk_size: int = 2000   # chars per chunk sent to the guard service
 
     api_host: str = "0.0.0.0"
     api_port: int = 3000

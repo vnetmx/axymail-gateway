@@ -67,7 +67,6 @@ async def list_messages(
                     m,
                     guard_url=guard["url"],
                     guard_timeout=guard["timeout"],
-                    max_chunk_size=guard["max_chunk_size"],
                 )
             else:
                 m, warnings = sanitize_message_summary(m)
@@ -121,7 +120,6 @@ async def get_message(
                 msg,
                 guard_url=guard["url"],
                 guard_timeout=guard["timeout"],
-                max_chunk_size=guard["max_chunk_size"],
             )
         else:
             msg, warnings = sanitize_message(msg)
