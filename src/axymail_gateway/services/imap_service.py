@@ -192,25 +192,28 @@ async def list_messages(
     List messages in *mailbox*, paginated by *page* / *page_size*.
 
     Fetches only headers + flags (no full body) for efficiency.
+
+    Note: aioimaplib's uid() does not support SEARCH, so we use the regular
+    SEARCH command (returns sequence numbers) then FETCH with UID in the data
+    spec to get the stable message UIDs.
     """
     client = await _connect(creds)
     try:
         await client.select(mailbox)
 
-        result, data = await client.uid("search", "ALL")
+        result, data = await client.search("ALL")
         if result != "OK" or not data or not data[0]:
             return []
 
-        all_uids: list[str] = data[0].decode().split()
+        all_seqs: list[str] = data[0].decode().split()
         start = page * page_size
-        page_uids = all_uids[start : start + page_size]
-        if not page_uids:
+        page_seqs = all_seqs[start : start + page_size]
+        if not page_seqs:
             return []
 
-        uid_set = ",".join(page_uids)
-        result, fetch_data = await client.uid(
-            "fetch",
-            uid_set,
+        seq_set = ",".join(page_seqs)
+        result, fetch_data = await client.fetch(
+            seq_set,
             "(UID FLAGS RFC822.SIZE BODY[HEADER.FIELDS (FROM TO SUBJECT DATE)])",
         )
         if result != "OK":
