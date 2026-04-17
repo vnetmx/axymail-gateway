@@ -92,6 +92,27 @@ def _strip_tags(html: str) -> str:
     return s.text()
 
 
+def build_fields(
+    subject: str | None,
+    text: str | None,
+    html: str | None,
+) -> list[tuple[str, str]]:
+    """
+    Build the list of (field_id, content) pairs to scan.
+    HTML is converted to visible text before being included.
+    """
+    fields: list[tuple[str, str]] = []
+    if subject and subject.strip():
+        fields.append(("subject", subject))
+    if text and text.strip():
+        fields.append(("text", text))
+    if html and html.strip():
+        visible = _strip_tags(html)
+        if visible.strip():
+            fields.append(("html", visible))
+    return fields
+
+
 # ── HTTP client ──────────────────────────────────────────────────────────────
 
 async def _scan_field(
@@ -139,18 +160,7 @@ async def scan_message_fields(
     Returns a GuardResult with per-field verdicts and sanitized content.
     On any network/timeout error, returns GuardResult(reachable=False).
     """
-    fields_to_scan: list[tuple[str, str]] = []
-
-    if subject and subject.strip():
-        fields_to_scan.append(("subject", subject))
-
-    if text and text.strip():
-        fields_to_scan.append(("text", text))
-
-    if html and html.strip():
-        visible = _strip_tags(html)
-        if visible.strip():
-            fields_to_scan.append(("html", visible))
+    fields_to_scan = build_fields(subject, text, html)
 
     if not fields_to_scan:
         return GuardResult()

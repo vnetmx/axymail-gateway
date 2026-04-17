@@ -9,7 +9,7 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
 
-from tests.conftest import register
+from tests.conftest import REGISTER_PAYLOAD, register
 
 # ── Shared mocks ──────────────────────────────────────────────────────────────
 
@@ -134,8 +134,7 @@ async def test_list_messages_wrong_account(client: AsyncClient):
     """Token for account A cannot list messages for account B."""
     account_id_a, _ = await register(client)
     account_id_b, token_b = await register(
-        client, {**__import__("tests.conftest", fromlist=["REGISTER_PAYLOAD"]).REGISTER_PAYLOAD,
-                 "email": "bob@example.com"}
+        client, {**REGISTER_PAYLOAD, "email": "bob@example.com"}
     )
 
     with patch(
