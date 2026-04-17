@@ -326,7 +326,6 @@ async def list_messages(
             capped_seqs = all_seqs[-sort_max:]
             result, fetch_data = await client.fetch(
                 ",".join(capped_seqs),
-                seq_set,
                 "(UID FLAGS RFC822.SIZE BODY[HEADER.FIELDS (FROM TO SUBJECT DATE)])",
             )
             if result != "OK":
