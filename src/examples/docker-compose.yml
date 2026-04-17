@@ -21,11 +21,13 @@ services:
       DB_PATH: "/data/axymail_gateway.db"
       ADMIN_API_KEY: "changeme"
 
-      # ── Observability ─────────────────────────────────────────────────────
+      # ── Content guard (LLM Guard API) ────────────────────────────────────
+      # GUARD_ENABLED: "true"
+      # GUARD_SERVICE_URL: "https://llmguard.axgot.tools"
+      # GUARD_TIMEOUT: "10"
+      # GUARD_FAIL_MODE: "open"
       PROMETHEUS_ENABLED: "true"
-      # OTEL_ENABLED: "true"
-      # OTEL_SERVICE_NAME: "axymail-gateway"
-      # OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+      OTEL_ENABLED: "false"
     volumes:
       - gateway_data:/data
     depends_on:

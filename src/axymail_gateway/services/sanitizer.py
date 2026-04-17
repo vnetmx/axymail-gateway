@@ -262,30 +262,48 @@ async def sanitize_message_with_guard(
     guard_timeout: float = 5.0,
 ) -> tuple[dict, list[str], bool]:
     """
-    Full sanitization pipeline — Layer 1 (local) + Layer 2 (external guard).
+    Full sanitization pipeline — Layer 1 (local) + Layer 2 (LLM Guard API).
+
+    1. Local: nh3 HTML sanitization + regex prompt injection detection.
+    2. Guard: POST each field to /analyze/prompt — runs PromptInjection and
+       Secrets scanners. The `sanitized_prompt` from each response is used as
+       the replacement content (secrets are redacted by the guard service).
+
+    For HTML: the guard scans the visible text. If the guard flags or modifies
+    the content, the HTML body is replaced with the sanitized plain text.
 
     Returns:
         (sanitized_msg, warnings, guard_reachable)
     """
-    from axymail_gateway.services.guard_client import build_fields, scan
+    from axymail_gateway.services.guard_client import scan_message_fields
 
     # Layer 1 — local
     msg, warnings = sanitize_message(msg)
 
-    # Layer 2 — external guard
-    fields = build_fields(
+    # Layer 2 — LLM Guard
+    result = await scan_message_fields(
+        base_url=guard_url,
         subject=msg.get("subject"),
         text=msg.get("text"),
         html=msg.get("html"),
+        timeout=guard_timeout,
     )
 
-    guard_reachable = True
-    if fields:
-        result = await scan(guard_url, fields, timeout=guard_timeout)
-        guard_reachable = result.reachable
-        warnings.extend(result.warnings())
+    if result.reachable:
+        for field_result in result.results:
+            if field_result.field_id == "subject":
+                msg["subject"] = field_result.sanitized_content
+            elif field_result.field_id == "text":
+                msg["text"] = field_result.sanitized_content
+            elif field_result.field_id == "html":
+                # If the guard flagged or redacted the HTML visible content,
+                # replace the HTML body with the sanitized plain text (safe fallback)
+                original_visible = _strip_tags_for_injection_scan(msg.get("html") or "")
+                if field_result.is_poisoned or field_result.sanitized_content != original_visible:
+                    msg["html"] = field_result.sanitized_content
 
-    return msg, warnings, guard_reachable
+    warnings.extend(result.warnings())
+    return msg, warnings, result.reachable
 
 
 async def sanitize_message_summary_with_guard(
@@ -294,30 +312,32 @@ async def sanitize_message_summary_with_guard(
     guard_timeout: float = 5.0,
 ) -> tuple[dict, list[str], bool]:
     """
-    Lighter sanitization for list items — Layer 1 + Layer 2 on subject only.
+    Lighter sanitization for list items — Layer 1 + LLM Guard on subject only.
 
     Returns:
         (sanitized_msg, warnings, guard_reachable)
     """
-    from axymail_gateway.services.guard_client import build_fields, scan
+    from axymail_gateway.services.guard_client import scan_message_fields
 
     # Layer 1 — local
     msg, warnings = sanitize_message_summary(msg)
 
-    # Layer 2 — guard service (subject only for list items)
-    fields = build_fields(
+    # Layer 2 — LLM Guard (subject only for list items)
+    result = await scan_message_fields(
+        base_url=guard_url,
         subject=msg.get("subject"),
         text=None,
         html=None,
+        timeout=guard_timeout,
     )
 
-    guard_reachable = True
-    if fields:
-        result = await scan(guard_url, fields, timeout=guard_timeout)
-        guard_reachable = result.reachable
-        warnings.extend(result.warnings())
+    if result.reachable:
+        for field_result in result.results:
+            if field_result.field_id == "subject":
+                msg["subject"] = field_result.sanitized_content
 
-    return msg, warnings, guard_reachable
+    warnings.extend(result.warnings())
+    return msg, warnings, result.reachable
 
 
 def sanitize_message_summary(msg: dict) -> tuple[dict, list[str]]:
