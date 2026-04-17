@@ -38,7 +38,6 @@ dev = [
     "pytest-asyncio",
     "httpx",
     "respx",
-    "mailpit",
 ]
 
 [project.scripts]
