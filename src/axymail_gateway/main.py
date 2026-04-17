@@ -4,6 +4,9 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("axymail_gateway")
+
 from cryptography.fernet import Fernet
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse

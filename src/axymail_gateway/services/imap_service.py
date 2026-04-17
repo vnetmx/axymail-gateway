@@ -7,12 +7,15 @@ and closes the connection (v1: no persistent pool).
 from __future__ import annotations
 
 import email
+import logging
 import re
 from dataclasses import dataclass
 from email.header import decode_header, make_header
 from email.message import Message
 
 import aioimaplib
+
+logger = logging.getLogger("axymail_gateway.imap")
 
 # ── IMAP flag constants ──────────────────────────────────────────────────────
 _FLAG_SEEN = "\\Seen"
@@ -219,6 +222,13 @@ async def list_messages(
         if result != "OK":
             return []
 
+        logger.debug("list_messages fetch_data len=%d", len(fetch_data))
+        for idx, item in enumerate(fetch_data):
+            if isinstance(item, (bytes, bytearray)):
+                logger.debug("  [%d] bytes len=%d repr=%r", idx, len(item), bytes(item)[:120])
+            else:
+                logger.debug("  [%d] type=%s repr=%r", idx, type(item).__name__, item)
+
         messages: list[dict] = []
         for meta_line, header_bytes in _extract_fetch_pairs(fetch_data):
             flags = _parse_flags_from_line(meta_line)
@@ -259,6 +269,13 @@ async def get_message(
         result, fetch_data = await client.uid("fetch", str(uid), "(UID FLAGS RFC822)")
         if result != "OK":
             return None
+
+        logger.debug("get_message uid=%s fetch_data len=%d", uid, len(fetch_data))
+        for idx, item in enumerate(fetch_data):
+            if isinstance(item, (bytes, bytearray)):
+                logger.debug("  [%d] bytes len=%d repr=%r", idx, len(item), bytes(item)[:120])
+            else:
+                logger.debug("  [%d] type=%s repr=%r", idx, type(item).__name__, item)
 
         pairs = _extract_fetch_pairs(fetch_data)
         if not pairs:
