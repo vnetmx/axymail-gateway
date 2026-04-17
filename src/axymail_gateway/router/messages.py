@@ -68,6 +68,7 @@ async def list_messages(
     # Sort
     sort_by: str | None = Query(None, description="Sort field: date | subject | from | size"),
     sort_order: str = Query("desc", description="Sort direction: asc | desc"),
+    sort_max: int = Query(500, ge=1, le=2000, description="Max messages to fetch when sorting (default 500)"),
     # Sanitization
     sanitize: bool = Query(True, description="Sanitize content against XSS and prompt injection"),
 ) -> list[MessageListItem]:
@@ -88,6 +89,7 @@ async def list_messages(
             flagged=flagged,
             sort_by=sort_by,
             sort_order=sort_order,
+            sort_max=sort_max,
         )
     except Exception as exc:
         raise HTTPException(

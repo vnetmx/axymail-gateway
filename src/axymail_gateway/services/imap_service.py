@@ -284,16 +284,17 @@ async def list_messages(
     page: int = 0,
     page_size: int = 20,
     # ── Filters ──────────────────────────────────────────────────────────────
-    q: str | None = None,           # free-text: subject OR from
-    subject: str | None = None,     # subject contains
-    from_addr: str | None = None,   # sender contains
-    since: str | None = None,       # messages on or after YYYY-MM-DD
-    before: str | None = None,      # messages before YYYY-MM-DD
-    seen: bool | None = None,       # True=read, False=unread
-    flagged: bool | None = None,    # True=flagged, False=unflagged
+    q: str | None = None,
+    subject: str | None = None,
+    from_addr: str | None = None,
+    since: str | None = None,
+    before: str | None = None,
+    seen: bool | None = None,
+    flagged: bool | None = None,
     # ── Sort ─────────────────────────────────────────────────────────────────
-    sort_by: str | None = None,     # date | subject | from | size
-    sort_order: str = "desc",       # asc | desc
+    sort_by: str | None = None,
+    sort_order: str = "desc",
+    sort_max: int = 500,    # max messages to fetch+sort; prevents timeouts on large mailboxes
 ) -> list[dict]:
     """
     List messages in *mailbox* with optional server-side filtering and
@@ -319,10 +320,12 @@ async def list_messages(
         if not all_seqs:
             return []
 
-        # ── With sort: fetch all matching headers, sort, then paginate ──────
+        # ── With sort: fetch at most sort_max most-recent matches ────────────
         if sort_by:
-            seq_set = ",".join(all_seqs)
+            # Take the last sort_max sequence numbers (most recent in IMAP order)
+            capped_seqs = all_seqs[-sort_max:]
             result, fetch_data = await client.fetch(
+                ",".join(capped_seqs),
                 seq_set,
                 "(UID FLAGS RFC822.SIZE BODY[HEADER.FIELDS (FROM TO SUBJECT DATE)])",
             )
