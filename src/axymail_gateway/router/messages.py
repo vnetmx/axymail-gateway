@@ -14,6 +14,11 @@ from axymail_gateway.services.sanitizer import (
 
 router = APIRouter(tags=["messages"])
 
+_GUARD_UNAVAILABLE_DETAIL = (
+    "Content guard service is unavailable and GUARD_FAIL_MODE=closed. "
+    "Cannot serve unvalidated content."
+)
+
 
 def _assert_owner(account: AccountRecord, account_id: str) -> None:
     if account.account_id != account_id:
@@ -63,11 +68,16 @@ async def list_messages(
         warnings: list[str] = []
         if sanitize:
             if guard:
-                m, warnings = await sanitize_message_summary_with_guard(
+                m, warnings, reachable = await sanitize_message_summary_with_guard(
                     m,
                     guard_url=guard["url"],
                     guard_timeout=guard["timeout"],
                 )
+                if not reachable and guard.get("fail_mode") == "closed":
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=_GUARD_UNAVAILABLE_DETAIL,
+                    )
             else:
                 m, warnings = sanitize_message_summary(m)
         result.append(
@@ -116,11 +126,16 @@ async def get_message(
     if sanitize:
         guard = _guard_config(request)
         if guard:
-            msg, warnings = await sanitize_message_with_guard(
+            msg, warnings, reachable = await sanitize_message_with_guard(
                 msg,
                 guard_url=guard["url"],
                 guard_timeout=guard["timeout"],
             )
+            if not reachable and guard.get("fail_mode") == "closed":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=_GUARD_UNAVAILABLE_DETAIL,
+                )
         else:
             msg, warnings = sanitize_message(msg)
 

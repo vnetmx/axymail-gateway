@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
         "enabled": settings.guard_enabled,
         "url": settings.guard_service_url,
         "timeout": settings.guard_timeout,
+        "fail_mode": settings.guard_fail_mode,
     }
 
     logger.info("axymail-gateway started. DB: %s", settings.db_path)

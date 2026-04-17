@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     guard_enabled: bool = False
     guard_service_url: str = ""
     guard_timeout: float = 5.0        # seconds per request
+    # Behavior when the guard service is unreachable:
+    #   "open"   — serve content with regex-only sanitization (permissive)
+    #   "closed" — reject the request with HTTP 503 (strict)
+    guard_fail_mode: str = "open"
 
     api_host: str = "0.0.0.0"
     api_port: int = 3000
