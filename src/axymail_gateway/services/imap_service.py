@@ -57,12 +57,9 @@ async def _connect(creds: ImapCredentials) -> aioimaplib.IMAP4_SSL | aioimaplib.
     client = _make_client(creds)
     await client.wait_hello_from_server()
     if creds.auth_type == "xoauth2":
-        # Gmail XOAUTH2: AUTHENTICATE XOAUTH2 <base64-string>
-        # The callback receives the server challenge (ignored for XOAUTH2 initial response).
-        xoauth2 = creds.xoauth2_string
-        result, _ = await client.authenticate("XOAUTH2", lambda _: xoauth2.encode())
+        result, data = await client.xoauth2(creds.user, creds.xoauth2_string)
         if result != "OK":
-            raise PermissionError("IMAP XOAUTH2 authentication failed — token may be expired.")
+            raise PermissionError(f"IMAP XOAUTH2 authentication failed: {data}")
     else:
         await client.login(creds.user, creds.password)
     return client

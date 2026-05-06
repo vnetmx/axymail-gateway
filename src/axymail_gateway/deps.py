@@ -101,7 +101,7 @@ async def get_account(
                     headers={"WWW-Authenticate": "Bearer"},
                 ) from exc
 
-        xoauth2 = build_xoauth2_string(row["email"], access_token)
+        xoauth2 = access_token  # raw token — library builds SASL string internally
         imap_creds = ImapCredentials(
             host=row["imap_host"],
             port=row["imap_port"],

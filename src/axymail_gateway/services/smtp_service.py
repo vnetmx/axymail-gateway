@@ -56,8 +56,8 @@ async def send_email(
     start_tls = creds.tls and creds.port != 465
 
     if creds.auth_type == "xoauth2":
-        # aiosmtplib AUTH XOAUTH2: the "password" is the raw base64 XOAUTH2 string.
-        # We must connect manually to control the AUTH mechanism.
+        from axymail_gateway.services.oauth_service import build_xoauth2_string
+        sasl = build_xoauth2_string(creds.user, creds.xoauth2_string)
         smtp = aiosmtplib.SMTP(
             hostname=creds.host,
             port=creds.port,
@@ -67,8 +67,7 @@ async def send_email(
         await smtp.connect()
         if start_tls:
             await smtp.starttls()
-        # Send AUTH XOAUTH2 directly — aiosmtplib passes the string as-is.
-        await smtp.login(creds.user, creds.xoauth2_string, login_type="XOAUTH2")
+        await smtp.login(creds.user, sasl, login_type="XOAUTH2")
         await smtp.sendmail(from_addr, all_recipients, msg.as_bytes())
         await smtp.quit()
         return True
