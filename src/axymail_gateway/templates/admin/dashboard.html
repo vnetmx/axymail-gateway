@@ -1,6 +1,6 @@
 {% extends "admin/base.html" %}
-
-{% block title %}Dashboard{% endblock %}
+{% set active_tab = 'accounts' %}
+{% block title %}Accounts{% endblock %}
 
 {% block content %}
 
@@ -11,42 +11,71 @@
 <div class="stats-grid">
   <div class="stat-card">
     <div class="stat-value">{{ accounts | length }}</div>
-    <div class="stat-label">Registered accounts</div>
+    <div class="stat-label">Total Accounts</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ accounts | selectattr('auth_type', 'equalto', 'oauth') | list | length }}</div>
+    <div class="stat-label">OAuth Accounts</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ accounts | rejectattr('auth_type', 'equalto', 'oauth') | list | length }}</div>
+    <div class="stat-label">Password Accounts</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ provider_count }}</div>
+    <div class="stat-label">OAuth Providers</div>
   </div>
 </div>
 
 <div class="card">
   <div class="card-header">
-    <span class="card-title">Accounts</span>
+    <span class="card-title">Registered Accounts</span>
   </div>
 
   {% if accounts %}
-  <table>
-    <thead>
-      <tr>
-        <th>Email</th>
-        <th>Account ID</th>
-        <th>IMAP</th>
-        <th>SMTP</th>
-        <th>Registered</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for acc in accounts %}
-      <tr>
-        <td><strong>{{ acc.email }}</strong></td>
-        <td><span class="mono">{{ acc.id }}</span></td>
-        <td class="text-muted mono">{{ acc.imap_host }}:{{ acc.imap_port }}</td>
-        <td class="text-muted mono">{{ acc.smtp_host }}:{{ acc.smtp_port }}</td>
-        <td class="text-muted">{{ acc.created_at[:19].replace("T", " ") }} UTC</td>
-        <td>
-          <a href="/admin/accounts/{{ acc.id }}/delete" class="btn btn-danger btn-sm">Delete</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Auth</th>
+          <th>Account ID</th>
+          <th>IMAP</th>
+          <th>SMTP</th>
+          <th>Registered</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for acc in accounts %}
+        <tr>
+          <td><strong>{{ acc.email }}</strong></td>
+          <td>
+            {% if acc.auth_type == 'oauth' %}
+              <span class="badge badge-blue">⚡ OAuth · {{ acc.oauth_provider or 'google' }}</span>
+            {% else %}
+              <span class="badge badge-gray">🔑 Password</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="mono">{{ acc.id[:8] }}…{{ acc.id[-4:] }}</span>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="padding:2px 7px;font-size:10px;margin-left:4px"
+              onclick="copyText('{{ acc.id }}', this)"
+            >Copy</button>
+          </td>
+          <td><span class="mono">{{ acc.imap_host }}:{{ acc.imap_port }}</span></td>
+          <td><span class="mono">{{ acc.smtp_host }}:{{ acc.smtp_port }}</span></td>
+          <td class="text-muted">{{ acc.created_at[:10] }}</td>
+          <td>
+            <a href="/admin/accounts/{{ acc.id }}/delete" class="btn btn-danger btn-sm">Delete</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
   <div class="empty-state">
     <div class="empty-state-icon">📭</div>

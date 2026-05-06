@@ -1,0 +1,142 @@
+{% extends "admin/base.html" %}
+{% set active_tab = 'providers' %}
+{% block title %}OAuth Providers{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }}">{{ flash.msg }}</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">OAuth Providers</span>
+    <button class="btn btn-primary btn-sm" onclick="togglePanel('add-form')">+ Add Provider</button>
+  </div>
+
+  <!-- Add provider form -->
+  <div id="add-form" class="add-panel {% if form_error %}open{% endif %}">
+    <div class="add-panel-title">Register a new Google OAuth app</div>
+    {% if form_error %}
+    <div class="alert alert-error" style="margin-bottom:16px">{{ form_error }}</div>
+    {% endif %}
+    <form method="post" action="/admin/providers" autocomplete="off">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label" for="name">Name (slug)</label>
+          <input class="form-input" type="text" id="name" name="name"
+            placeholder="acme-corp" required
+            pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]"
+            value="{{ form_data.name if form_data else '' }}" />
+          <p class="form-hint">Lowercase, hyphens only. Used in the authorize/callback URL.</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="client_id">Client ID</label>
+          <input class="form-input" type="text" id="client_id" name="client_id"
+            placeholder="123456.apps.googleusercontent.com" required
+            value="{{ form_data.client_id if form_data else '' }}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="client_secret">Client Secret</label>
+          <input class="form-input" type="password" id="client_secret" name="client_secret"
+            placeholder="GOCSPX-…" required autocomplete="new-password" />
+          <p class="form-hint">Stored encrypted. Never shown again.</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="redirect_uri">Redirect URI</label>
+          <input class="form-input" type="url" id="redirect_uri" name="redirect_uri"
+            placeholder="https://axymail.axgot.tools/v1/oauth/acme-corp/callback" required
+            value="{{ form_data.redirect_uri if form_data else '' }}" />
+          <p class="form-hint">Must match the URI registered in GCP exactly.</p>
+        </div>
+      </div>
+      <div class="form-actions mt-4">
+        <button type="submit" class="btn btn-primary">Save Provider</button>
+        <button type="button" class="btn btn-secondary" onclick="togglePanel('add-form')">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Providers table -->
+  {% if providers %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Client ID</th>
+          <th>Redirect URI</th>
+          <th>Authorize URL</th>
+          <th>Registered</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in providers %}
+        <tr>
+          <td><span class="provider-slug">{{ p.name }}</span></td>
+          <td>
+            <span class="masked">{{ p.client_id[:12] }}…</span>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="padding:2px 7px;font-size:10px;margin-left:4px"
+              onclick="copyText('{{ p.client_id }}', this)"
+            >Copy</button>
+          </td>
+          <td>
+            <span class="mono truncate" title="{{ p.redirect_uri }}">{{ p.redirect_uri }}</span>
+          </td>
+          <td>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="padding:2px 9px;font-size:11px"
+              onclick="copyText('/v1/oauth/{{ p.name }}/authorize', this)"
+            >Copy URL</button>
+          </td>
+          <td class="text-muted">{{ p.created_at[:10] }}</td>
+          <td>
+            <a href="/admin/providers/{{ p.name }}/delete" class="btn btn-danger btn-sm">Delete</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">🔐</div>
+    <div class="empty-state-text">No OAuth providers registered yet.<br>
+      <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="togglePanel('add-form')">
+        + Add your first provider
+      </button>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Usage guide -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">How to use</span>
+  </div>
+  <div class="card-body" style="font-size:13px;line-height:1.8;color:var(--muted)">
+    <p style="margin-bottom:12px">Each provider maps one Google Cloud OAuth app to a URL slug.
+      Users go through the consent flow once per account and get back a bearer token.</p>
+    <table class="detail-table" style="margin-bottom:0">
+      <tr>
+        <td>Authorize URL</td>
+        <td><code>GET /v1/oauth/{name}/authorize</code> → returns <code>{"auth_url": "…"}</code></td>
+      </tr>
+      <tr>
+        <td>Callback</td>
+        <td><code>GET /v1/oauth/{name}/callback?code=…</code> → returns <code>{"account_id","token","email"}</code></td>
+      </tr>
+      <tr>
+        <td>After that</td>
+        <td>Use the token as <code>Authorization: Bearer &lt;token&gt;</code> on all IMAP/SMTP endpoints</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
