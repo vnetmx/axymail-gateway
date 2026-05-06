@@ -15,6 +15,9 @@ class SmtpCredentials:
     user: str
     password: str
     tls: bool  # True = STARTTLS (unless port 465 which implies implicit SSL)
+    # OAuth — set auth_type='xoauth2' and populate xoauth2_string instead of password
+    auth_type: str = "password"   # 'password' | 'xoauth2'
+    xoauth2_string: str = ""      # base64 XOAUTH2 SASL payload (see oauth_service)
 
 
 async def send_email(
@@ -51,6 +54,24 @@ async def send_email(
     # Decide TLS mode based on port
     use_tls = creds.port == 465
     start_tls = creds.tls and creds.port != 465
+
+    if creds.auth_type == "xoauth2":
+        # aiosmtplib AUTH XOAUTH2: the "password" is the raw base64 XOAUTH2 string.
+        # We must connect manually to control the AUTH mechanism.
+        smtp = aiosmtplib.SMTP(
+            hostname=creds.host,
+            port=creds.port,
+            use_tls=use_tls,
+            start_tls=start_tls,
+        )
+        await smtp.connect()
+        if start_tls:
+            await smtp.starttls()
+        # Send AUTH XOAUTH2 directly — aiosmtplib passes the string as-is.
+        await smtp.login(creds.user, creds.xoauth2_string, login_type="XOAUTH2")
+        await smtp.sendmail(from_addr, all_recipients, msg.as_bytes())
+        await smtp.quit()
+        return True
 
     await aiosmtplib.send(
         msg,

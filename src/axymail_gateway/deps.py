@@ -6,10 +6,20 @@ from cryptography.fernet import Fernet
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from axymail_gateway.database import get_account_by_id, get_account_by_token_hash, get_db
+from axymail_gateway.database import (
+    get_account_by_id,
+    get_account_by_token_hash,
+    get_db,
+    update_oauth_tokens,
+)
 from axymail_gateway.services.imap_service import ImapCredentials
+from axymail_gateway.services.oauth_service import (
+    build_xoauth2_string,
+    is_token_expired,
+    refresh_access_token,
+)
 from axymail_gateway.services.smtp_service import SmtpCredentials
-from axymail_gateway.services.token_service import decrypt, hash_token
+from axymail_gateway.services.token_service import decrypt, encrypt, hash_token
 
 bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -54,20 +64,68 @@ async def get_account(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    imap_creds = ImapCredentials(
-        host=row["imap_host"],
-        port=row["imap_port"],
-        user=row["imap_user"],
-        password=decrypt(fernet, row["imap_password_enc"]),
-        tls=bool(row["imap_tls"]),
-    )
-    smtp_creds = SmtpCredentials(
-        host=row["smtp_host"],
-        port=row["smtp_port"],
-        user=row["smtp_user"],
-        password=decrypt(fernet, row["smtp_password_enc"]),
-        tls=bool(row["smtp_tls"]),
-    )
+    auth_type: str = row.get("auth_type") or "password"
+
+    # ── OAuth account ──────────────────────────────────────────────────
+    if auth_type == "oauth":
+        oauth_cfg = request.app.state.oauth_config
+        access_token = decrypt(fernet, row["oauth_access_token_enc"])
+        expiry = row.get("oauth_token_expiry") or ""
+
+        # Refresh if expired or about to expire (within 5 min)
+        if is_token_expired(expiry):
+            try:
+                refresh_token = decrypt(fernet, row["oauth_refresh_token_enc"])
+                access_token, new_expiry = await refresh_access_token(
+                    refresh_token,
+                    client_id=oauth_cfg["client_id"],
+                    client_secret=oauth_cfg["client_secret"],
+                )
+                new_enc = encrypt(fernet, access_token)
+                async with get_db(db_path) as conn:
+                    await update_oauth_tokens(conn, row["id"], new_enc, new_expiry)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"OAuth token refresh failed: {exc}",
+                    headers={"WWW-Authenticate": "Bearer"},
+                ) from exc
+
+        xoauth2 = build_xoauth2_string(row["email"], access_token)
+        imap_creds = ImapCredentials(
+            host=row["imap_host"],
+            port=row["imap_port"],
+            user=row["imap_user"],
+            password="",
+            tls=bool(row["imap_tls"]),
+            auth_type="xoauth2",
+            xoauth2_string=xoauth2,
+        )
+        smtp_creds = SmtpCredentials(
+            host=row["smtp_host"],
+            port=row["smtp_port"],
+            user=row["smtp_user"],
+            password="",
+            tls=bool(row["smtp_tls"]),
+            auth_type="xoauth2",
+            xoauth2_string=xoauth2,
+        )
+    # ── Password account ────────────────────────────────────────────────
+    else:
+        imap_creds = ImapCredentials(
+            host=row["imap_host"],
+            port=row["imap_port"],
+            user=row["imap_user"],
+            password=decrypt(fernet, row["imap_password_enc"]),
+            tls=bool(row["imap_tls"]),
+        )
+        smtp_creds = SmtpCredentials(
+            host=row["smtp_host"],
+            port=row["smtp_port"],
+            user=row["smtp_user"],
+            password=decrypt(fernet, row["smtp_password_enc"]),
+            tls=bool(row["smtp_tls"]),
+        )
 
     return AccountRecord(
         account_id=row["id"],

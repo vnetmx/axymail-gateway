@@ -40,6 +40,9 @@ class ImapCredentials:
     user: str
     password: str
     tls: bool  # True = implicit TLS/SSL; False = plain or STARTTLS
+    # OAuth — set auth_type='xoauth2' and populate xoauth2_string instead of password
+    auth_type: str = "password"   # 'password' | 'xoauth2'
+    xoauth2_string: str = ""      # base64 XOAUTH2 SASL payload (see oauth_service)
 
 
 # ── internal helpers ─────────────────────────────────────────────────────────
@@ -53,7 +56,15 @@ def _make_client(creds: ImapCredentials) -> aioimaplib.IMAP4_SSL | aioimaplib.IM
 async def _connect(creds: ImapCredentials) -> aioimaplib.IMAP4_SSL | aioimaplib.IMAP4:
     client = _make_client(creds)
     await client.wait_hello_from_server()
-    await client.login(creds.user, creds.password)
+    if creds.auth_type == "xoauth2":
+        # Gmail XOAUTH2: AUTHENTICATE XOAUTH2 <base64-string>
+        # The callback receives the server challenge (ignored for XOAUTH2 initial response).
+        xoauth2 = creds.xoauth2_string
+        result, _ = await client.authenticate("XOAUTH2", lambda _: xoauth2.encode())
+        if result != "OK":
+            raise PermissionError("IMAP XOAUTH2 authentication failed — token may be expired.")
+    else:
+        await client.login(creds.user, creds.password)
     return client
 
 

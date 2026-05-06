@@ -14,7 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from axymail_gateway.config import settings
 from axymail_gateway.database import init_db
 from axymail_gateway.router import accounts, mailboxes, messages, send
-from axymail_gateway.router import admin, health
+from axymail_gateway.router import admin, health, oauth
 from axymail_gateway.telemetry import setup_metrics, setup_tracing
 
 logger = logging.getLogger("axymail_gateway")
@@ -40,6 +40,11 @@ async def lifespan(app: FastAPI):
         "url": settings.guard_service_url,
         "timeout": settings.guard_timeout,
         "fail_mode": settings.guard_fail_mode,
+    }
+    app.state.oauth_config = {
+        "client_id": settings.google_client_id,
+        "client_secret": settings.google_client_secret,
+        "redirect_uri": settings.google_redirect_uri,
     }
 
     logger.info("axymail-gateway started. DB: %s", settings.db_path)
@@ -76,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(mailboxes.router, prefix="/v1")
     app.include_router(messages.router, prefix="/v1")
     app.include_router(send.router, prefix="/v1")
+    app.include_router(oauth.router, prefix="/v1")
 
     # ── Admin dashboard ───────────────────────────────────────────────────────
     app.include_router(admin.router)

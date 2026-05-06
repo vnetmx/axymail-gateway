@@ -41,6 +41,16 @@ class RegisterAccountResponse(BaseModel):
     email: str
 
 
+# ---------------------------------------------------------------------------
+# OAuth
+# ---------------------------------------------------------------------------
+
+class OAuthAuthorizeResponse(BaseModel):
+    auth_url: str = Field(
+        description="Redirect the user to this URL to start the Google OAuth consent flow."
+    )
+
+
 class AccountInfo(BaseModel):
     account_id: str
     email: str

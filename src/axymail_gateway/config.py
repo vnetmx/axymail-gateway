@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     api_port: int = 3000
     debug: bool = False
 
+    # ── Google OAuth (for Gmail XOAUTH2 IMAP/SMTP) ───────────────────────────
+    # Obtain from: console.cloud.google.com → APIs & Services → Credentials
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Must match the redirect URI registered in your GCP OAuth client.
+    # Example: https://axymail.axgot.tools/v1/oauth/gmail/callback
+    google_redirect_uri: str = "http://localhost:3000/v1/oauth/gmail/callback"
+
     def get_encryption_key(self) -> str:
         """Return the configured key or generate one (ephemeral)."""
         if self.encryption_key:
