@@ -14,6 +14,16 @@ _OAUTH_COLUMNS = [
     ("oauth_token_expiry",      "TEXT"),  # ISO-8601 UTC timestamp
 ]
 
+CREATE_OAUTH_PROVIDERS_TABLE = """
+CREATE TABLE IF NOT EXISTS oauth_providers (
+    name TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    client_secret_enc TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    created_at TEXT NOT NULL
+)
+"""
+
 CREATE_ACCOUNTS_TABLE = """
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
@@ -35,9 +45,10 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 
 async def init_db(db_path: str) -> None:
-    """Create the accounts table and run any pending column migrations."""
+    """Create tables and run any pending column migrations."""
     async with aiosqlite.connect(db_path) as conn:
         await conn.execute(CREATE_ACCOUNTS_TABLE)
+        await conn.execute(CREATE_OAUTH_PROVIDERS_TABLE)
         await conn.commit()
         # Idempotent migrations — add OAuth columns to existing databases.
         async with conn.execute("PRAGMA table_info(accounts)") as cur:
@@ -129,6 +140,47 @@ async def list_accounts(conn: aiosqlite.Connection) -> list[dict]:
 async def delete_account(conn: aiosqlite.Connection, account_id: str) -> bool:
     cursor = await conn.execute(
         "DELETE FROM accounts WHERE id = ?", (account_id,)
+    )
+    await conn.commit()
+    return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# OAuth providers
+# ---------------------------------------------------------------------------
+
+async def insert_provider(conn: aiosqlite.Connection, record: dict) -> None:
+    await conn.execute(
+        """
+        INSERT INTO oauth_providers (name, client_id, client_secret_enc, redirect_uri, created_at)
+        VALUES (:name, :client_id, :client_secret_enc, :redirect_uri, :created_at)
+        """,
+        record,
+    )
+    await conn.commit()
+
+
+async def get_provider_by_name(
+    conn: aiosqlite.Connection, name: str
+) -> dict | None:
+    async with conn.execute(
+        "SELECT * FROM oauth_providers WHERE name = ?", (name,)
+    ) as cursor:
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def list_providers(conn: aiosqlite.Connection) -> list[dict]:
+    async with conn.execute(
+        "SELECT name, client_id, redirect_uri, created_at FROM oauth_providers ORDER BY created_at DESC"
+    ) as cursor:
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+async def delete_provider(conn: aiosqlite.Connection, name: str) -> bool:
+    cursor = await conn.execute(
+        "DELETE FROM oauth_providers WHERE name = ?", (name,)
     )
     await conn.commit()
     return cursor.rowcount > 0

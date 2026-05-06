@@ -41,11 +41,6 @@ async def lifespan(app: FastAPI):
         "timeout": settings.guard_timeout,
         "fail_mode": settings.guard_fail_mode,
     }
-    app.state.oauth_config = {
-        "client_id": settings.google_client_id,
-        "client_secret": settings.google_client_secret,
-        "redirect_uri": settings.google_redirect_uri,
-    }
 
     logger.info("axymail-gateway started. DB: %s", settings.db_path)
     yield

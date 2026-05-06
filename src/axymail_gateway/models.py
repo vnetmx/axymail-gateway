@@ -51,6 +51,30 @@ class OAuthAuthorizeResponse(BaseModel):
     )
 
 
+class RegisterProviderRequest(BaseModel):
+    name: str = Field(
+        description="URL-safe slug used to identify this provider (e.g. 'acme-corp').",
+        pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$",
+    )
+    client_id: str = Field(description="Google OAuth client ID.")
+    client_secret: str = Field(description="Google OAuth client secret (stored encrypted, never returned).")
+    redirect_uri: str = Field(
+        description="Callback URI registered in GCP (e.g. https://axymail.axgot.tools/v1/oauth/acme-corp/callback)."
+    )
+
+
+class RegisterProviderResponse(BaseModel):
+    name: str
+    redirect_uri: str
+
+
+class ProviderInfo(BaseModel):
+    name: str
+    client_id: str
+    redirect_uri: str
+    created_at: str
+
+
 class AccountInfo(BaseModel):
     account_id: str
     email: str

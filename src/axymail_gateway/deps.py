@@ -10,6 +10,7 @@ from axymail_gateway.database import (
     get_account_by_id,
     get_account_by_token_hash,
     get_db,
+    get_provider_by_name,
     update_oauth_tokens,
 )
 from axymail_gateway.services.imap_service import ImapCredentials
@@ -68,18 +69,27 @@ async def get_account(
 
     # ── OAuth account ──────────────────────────────────────────────────
     if auth_type == "oauth":
-        oauth_cfg = request.app.state.oauth_config
+        provider_name: str = row.get("oauth_provider") or ""
         access_token = decrypt(fernet, row["oauth_access_token_enc"])
         expiry = row.get("oauth_token_expiry") or ""
 
         # Refresh if expired or about to expire (within 5 min)
         if is_token_expired(expiry):
+            async with get_db(db_path) as conn:
+                provider = await get_provider_by_name(conn, provider_name)
+            if not provider:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"OAuth provider '{provider_name}' not found. It may have been deleted.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
             try:
                 refresh_token = decrypt(fernet, row["oauth_refresh_token_enc"])
+                client_secret = decrypt(fernet, provider["client_secret_enc"])
                 access_token, new_expiry = await refresh_access_token(
                     refresh_token,
-                    client_id=oauth_cfg["client_id"],
-                    client_secret=oauth_cfg["client_secret"],
+                    client_id=provider["client_id"],
+                    client_secret=client_secret,
                 )
                 new_enc = encrypt(fernet, access_token)
                 async with get_db(db_path) as conn:
