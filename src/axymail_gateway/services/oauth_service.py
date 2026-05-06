@@ -26,8 +26,8 @@ _AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
-# Full IMAP + SMTP access scope (XOAUTH2)
-_GMAIL_SCOPE = "https://mail.google.com/"
+# Full IMAP + SMTP access scope (XOAUTH2) + email identity
+_GMAIL_SCOPE = "https://mail.google.com/ openid email"
 
 
 # ── Public types ─────────────────────────────────────────────────────────────
